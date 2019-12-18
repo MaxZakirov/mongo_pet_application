@@ -1,0 +1,174 @@
+use  BlogSystemDB
+
+Sort inner array:
+ db.Users.aggregate({$unwind: '$Blogs'}, { $sort: {'Blogs.CreatedOn': 1} }, {$group: {_id: '$_id', 'Blogs':{$push: '$Blogs'}}}).pretty();
+
+ db.Users.aggregate({$match: { '_id': 'test1' } }, {$unwind: '$Blogs'}, { $sort: {'Blogs.CreatedOn': 1} }, {$group: {_id: '$_id', 'Blogs':{$push: '$Blogs'}}}).pretty();
+
+db.Users.aggregate({$unwind: '$Blogs'}, {$match: { '$Blogs._id': 'ObjectId("5de0057b95b65e6cc4b3dbe1")' } }).pretty();
+
+Find object and filter inner array
+db.Users.aggregate([
+{
+    $project: {
+        Blogs : {
+            $filter: {
+                input: "$Blogs",
+                as: "blog",
+                cond: {
+                   $eq: [ "$$blog._id", ObjectId("5de0f72f168d2007e0753ca0") ] 
+                }
+            }
+        }
+    }
+}]).pretty();
+
+db.Users.aggregate([
+{
+    $match: {
+        "Blogs._id" : ObjectId("5de0f72f168d2007e0753ca0")
+    }
+},
+{
+    $project: {
+        Blogs : {
+            $filter: {
+                input: "$Blogs",
+                as: "blog",
+                cond: {
+                   $eq: [ "$$blog._id", ObjectId("5de0f72f168d2007e0753ca0") ] 
+                }
+            }
+        }
+    }
+}]).pretty();
+
+Delete from nested array:
+db.Users.update(
+{ "Blogs._id" : ObjectId("5de0f72f168d2007e0753ca0") },
+{ $pull : {"Blogs" : { "_id": ObjectId("5de0f72f168d2007e0753ca0") } } }
+);
+
+db.Articles.findOne().pretty();
+
+Unavailable with free cluster type
+db.Articles.aggregate([
+{
+    $addFields: {
+        "Comments": {
+            $filter: {
+                input: "$Comments",
+                as: "comment",
+                cond: {
+                    "$eq": [
+                        { "$size": "$$comment.Replies" }, 0
+                    ]
+                }
+            }
+        }
+    }
+}]).pretty();
+
+db.Articles.aggregate([
+{
+    $project: {
+        "Name": 1,
+        "Text": 1,
+        "Likes": 1,
+        "Views": 1,
+        "Tags": 1,
+        "BlogId": 1,
+        "Comments": {
+            $filter: {
+                input: "$Comments",
+                as: "comment",
+                cond: {
+                    "$eq": [
+                        { "$size": "$$comment.Replies" }, 0
+                    ]
+                }
+            }
+        }
+    }
+}]).pretty();
+
+db.Articles.aggregate([
+    {
+        $group:
+        {
+            _id: null,
+            mostLiked: { $max: "$Likes" }
+        }
+    }
+]);
+
+function customMap() {
+    emit(this.blog_id, this.Likes);
+}
+
+function customeReduce(keyCustId, values) {
+    var sum = 0;
+	for(var i in values) {
+		sum += values[i];
+	}
+	return sum;
+}
+
+db.Articles.mapReduce(customMap, customeReduce, { out: "map_reduce_example" }).find().pretty()
+
+
+function map(keyCustId, values) {
+    
+
+    var sum = 0;
+    var comments = [];
+
+    for(var i in values) {
+        comments.push(values[i].comments);
+		sum += rec(values[i].comments);
+	}
+
+    return { comments: comments, amount: sum };
+}
+
+function map(article) {
+    return article.Likes;
+}
+
+db.Articles.find().map(map)
+
+function rec(comments) {
+        var res = comments.length;
+
+        for(var i=0;i<comments.length; i++)
+        {
+            var comment = comments[i];
+
+            if(comment.Replies.length > 0)
+            {
+                res += rec(comment.Replies);
+            }
+        }
+
+        return res;
+}
+
+function map(article) {
+    return { id: article._id , count: rec(article.Comments) };
+}
+
+db.Articles.find().map(map)
+
+db.Articles.find().limit(1).pretty()
+
+db.Articles.aggregate([
+        { $unwind: '$Tags'}, 
+        { $group: { _id: "$Tags", total: { $sum: 1 } } },
+        { $sort: {'total': -1 } }
+    ]).pretty();
+
+db.Articles.countDocuments({ Tags: "nobis" })
+
+    { $sortByCount:  { $total : 1 } }
+
+db.Articles.stats()
